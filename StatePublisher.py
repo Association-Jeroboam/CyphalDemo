@@ -30,8 +30,9 @@ saturation = False
 
 
 async def twist_goal_receive(msg: reg.udral.physics.kinematics.cartesian.Twist_0_1, _metadata: pycyphal.transport.TransferFrom) -> None:
-    print(f'linear {msg.linear}')
-    print(f'angular {msg.angular}')
+    print(f'linear  {msg.linear.meter_per_second}')
+    print(f'angular {msg.angular.radian_per_second}')
+    print()
 
 
 async def main() -> None:

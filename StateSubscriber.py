@@ -95,8 +95,9 @@ class StatePublisher:
             robot_current_pose = msg.pose
             nonlocal robot_current_twist
             robot_current_twist= msg.twist
-            print(f'pose {robot_current_pose}')
-            print(f'twist {robot_current_twist}')
+            print(f'pose  {robot_current_pose.position.value.meter} {robot_current_pose.orientation.wxyz}')
+            print(f'twist {robot_current_twist.linear.meter_per_second} {robot_current_twist.angular.radian_per_second}')
+            print()
 
         self._sub_t_sp.receive_in_background(on_robot_current_state_msg)  # IoC-style handler.
 
