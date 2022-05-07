@@ -97,7 +97,7 @@ class StatePublisher:
             nonlocal previous_ts
             freq = 1/(ts - previous_ts)
             previous_ts = ts
-            print(f'Hz {freq}')
+            print("{:.0f}".format(freq))
             nonlocal robot_current_pose
             robot_current_pose = msg.pose
             nonlocal robot_current_twist
