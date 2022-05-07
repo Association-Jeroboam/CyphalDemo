@@ -9,6 +9,7 @@ import asyncio
 import logging
 import importlib
 import pycyphal
+import time
 
 # Production applications are recommended to compile their DSDL namespaces as part of the build process. The enclosed
 # file "setup.py" provides an example of how to do that. The output path we specify here shall match that of "setup.py".
@@ -87,17 +88,23 @@ class StatePublisher:
         The main method that runs the business logic. It is also possible to use the library in an IoC-style
         by using receive_in_background() for all subscriptions if desired.
         """
-        robot_current_pose = [[0., 0., 0.],[1., 0., 0., 0.]]
-        robot_current_twist = [[0., 0., 0.], [0., 0., 0.]]
+        robot_current_pose = reg.udral.physics.kinematics.cartesian.Pose_0_1
+        robot_current_twist = reg.udral.physics.kinematics.cartesian.Twist_0_1
+        previous_ts = 0
 
         async def on_robot_current_state_msg(msg: reg.udral.physics.kinematics.cartesian.State_0_1, _: pycyphal.transport.TransferFrom) -> None:
+            ts = time.time()
+            nonlocal previous_ts
+            freq = 1/(ts - previous_ts)
+            previous_ts = ts
+            print(f'Hz {freq}')
             nonlocal robot_current_pose
             robot_current_pose = msg.pose
             nonlocal robot_current_twist
             robot_current_twist= msg.twist
-            print(f'pose  {robot_current_pose.position.value.meter} {robot_current_pose.orientation.wxyz}')
-            print(f'twist {robot_current_twist.linear.meter_per_second} {robot_current_twist.angular.radian_per_second}')
-            print()
+            # print(f'pose  {robot_current_pose.position.value.meter} {robot_current_pose.orientation.wxyz}')
+            # print(f'twist {robot_current_twist.linear.meter_per_second} {robot_current_twist.angular.radian_per_second}')
+            # print()
 
         self._sub_t_sp.receive_in_background(on_robot_current_state_msg)  # IoC-style handler.
 
