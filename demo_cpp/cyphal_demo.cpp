@@ -54,7 +54,7 @@ void execution_thread() {
     //cheat to simulate an external process
     while(true) {
         heartbeatRoutine();
-        pthread_mutex_unlock(&execution_lock);
+        pthread_mutex_unlock(&execution_lock); //acts lit it notified the transmit thread
         usleep(1000000);
     }
 }
@@ -80,7 +80,7 @@ int main(int argc, char ** argv) {
 
     initCAN(iface);
     initCanard();
-    CanardPortID portID = 0;
+    CanardPortID portID = 0; // Robot Current State ID
     subscribe(CanardTransferKindMessage, portID, reg_udral_physics_kinematics_cartesian_State_0_1_EXTENT_BYTES_);
     subscribe(CanardTransferKindMessage, uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_, uavcan_node_Heartbeat_1_0_EXTENT_BYTES_);
 
@@ -110,6 +110,7 @@ void rcvThread(void) {
     while (true) {
         if(canIFace !=0) {
             struct can_frame rx_frame;
+            //this is blocking
             int nbytes = read(canIFace, &rx_frame, sizeof(struct can_frame));
             auto receiveTS = std::chrono::high_resolution_clock::now();
 
@@ -217,7 +218,7 @@ void checkTxQueue(void) {
 }
 
 void heartbeatRoutine(void) {
-    static CanardTransferID transfer_id = 0;
+    static CanardTransferID transfer_id = 0; // unique for each port!
     struct sysinfo info;
     sysinfo(&info);
 
@@ -265,7 +266,7 @@ bool pushQueue(const CanardTransferMetadata* const metadata,
                const size_t                        payload_size,
                const void* const                   payload) {
     bool success;
-    pthread_mutex_lock(&queue_lock);
+    pthread_mutex_lock(&queue_lock); // prevents other threads from pushing in the queue at the same time
     int32_t res = canardTxPush(&queue, &instance, 0, metadata, payload_size, payload);
     pthread_mutex_unlock(&queue_lock);
     success = (0 <= res);
@@ -298,6 +299,8 @@ bool subscribe(CanardTransferKind transfer_kind, CanardPortID port_id, size_t ex
 }
 
 void initCAN(char * iface) {
+
+    // stolen from the basic tutorial
     struct sockaddr_can addr;
     struct ifreq ifr;
 
@@ -322,7 +325,7 @@ void initCAN(char * iface) {
 
 void initCanard(void) {
     instance = canardInit(canardSpecificAlloc, canardSpecificFree);
-    instance.node_id = 42;
+    instance.node_id = 42; // Embedded computer Node ID
     queue = canardTxInit(100, MAX_FRAME_SIZE);
 }
 
