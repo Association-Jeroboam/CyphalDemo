@@ -130,7 +130,16 @@ void rcvThread(void) {
                     //success
 
                     // process message
+                    reg_udral_physics_kinematics_cartesian_State_0_1 state;
+                    bool state_rcvd = false;
+                    if(transfer.metadata.port_id == 0) {
 
+                        state_rcvd = true;
+                        reg_udral_physics_kinematics_cartesian_State_0_1_deserialize_(&state,
+                                                                                      (uint8_t *)transfer.payload,
+                                                                                      &transfer.payload_size);
+
+                    }
                     //then
                     instance.memory_free(&instance, transfer.payload);
 
@@ -143,6 +152,26 @@ void rcvThread(void) {
                     std::cout << "exec time: " << std::chrono::duration_cast<std::chrono::microseconds>(now - before).count() << "µs\n";
                     std::cout << "dt: " << std::chrono::duration_cast<std::chrono::microseconds>(dt).count() << "µs\n";
                     std::cout << "freq: " << freq << "Hz\n";
+
+                    if(state_rcvd) {
+                        for (int i = 0; i < 3; ++i) {
+                            printf("%.4f ", state.pose.position.value.meter[i]);
+                        }
+                        printf("\n");
+                        for (int i = 0; i < 4; ++i) {
+                            printf("%.4f ", state.pose.orientation.wxyz[i]);
+                        }
+                        printf("\n");
+                        for (int i = 0; i < 3; ++i) {
+                            printf("%.4f ", state.twist.linear.meter_per_second[i]);
+                        }
+                        printf("\n");
+                        for (int i = 0; i < 3; ++i) {
+                            printf("%.4f ", state.twist.angular.radian_per_second[i]);
+                        }
+                        printf("\n");
+
+                    }
 
                 } else if (ret == 0) {
                     // rejected because not subscribed or transfer not complete
