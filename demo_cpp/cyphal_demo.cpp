@@ -82,6 +82,7 @@ int main(int argc, char ** argv) {
     initCanard();
     CanardPortID portID = 0;
     subscribe(CanardTransferKindMessage, portID, reg_udral_physics_kinematics_cartesian_State_0_1_EXTENT_BYTES_);
+    subscribe(CanardTransferKindMessage, uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_, uavcan_node_Heartbeat_1_0_EXTENT_BYTES_);
 
     if (pthread_mutex_init(&execution_lock, NULL) != 0)
     {
@@ -110,54 +111,47 @@ void rcvThread(void) {
         if(canIFace !=0) {
             struct can_frame rx_frame;
             int nbytes = read(canIFace, &rx_frame, sizeof(struct can_frame));
-
             auto receiveTS = std::chrono::high_resolution_clock::now();
-            auto before = std::chrono::high_resolution_clock::now();
+
 
             if (nbytes >= 0) {
+                auto before = std::chrono::high_resolution_clock::now();
                 const CanardMicrosecond timestamp = 0;
                 CanardFrame frame = {
                         .extended_can_id = rx_frame.can_id & CAN_EXT_ID_MASK,
                         .payload_size = rx_frame.can_dlc,
                         .payload = rx_frame.data,
                 };
-                printf("id %X\n", rx_frame.can_id);
-                printf("dlc %X\n", rx_frame.can_dlc);
-                for (int i = 0; i < rx_frame.can_dlc; ++i) {
-                    printf("%X ", rx_frame.data[i]);
-                }
-                printf("\n");
 
                 CanardRxTransfer transfer;
                 CanardRxSubscription * sub;
                 int32_t ret = canardRxAccept(&instance, timestamp, &frame, 0, &transfer, &sub);
                 if(ret == 1) {
                     //success
-                    printf("MSG rcvd\n");
-                    printf("ID %lu\n", frame.extended_can_id);
-                    printf("data: ");
-                    for(uint32_t i = 0; i < frame.payload_size; i++) {
-                        printf("%X ", ((uint32_t*)frame.payload)[i]);
-                    }
+
+                    // process message
+
+                    //then
                     instance.memory_free(&instance, transfer.payload);
 
+                    auto now = std::chrono::high_resolution_clock::now();
+                    auto delta = now - before;
+
+                    auto dt = receiveTS - lastReceiveTS;
+                    lastReceiveTS = receiveTS;
+                    float freq = 1./(std::chrono::duration_cast<std::chrono::microseconds>(dt).count()) * 1000000.;
+                    std::cout << "exec time: " << std::chrono::duration_cast<std::chrono::microseconds>(now - before).count() << "µs\n";
+                    std::cout << "dt: " << std::chrono::duration_cast<std::chrono::microseconds>(dt).count() << "µs\n";
+                    std::cout << "freq: " << freq << "Hz\n";
+
                 } else if (ret == 0) {
-                    // rejected or transfer not completed
+                    // rejected because not subscribed or transfer not complete
                 }else {
                     //error
                     printf("frame error %i\n", ret);
                 }
             }
-            auto now = std::chrono::high_resolution_clock::now();
-            auto delta = now - before;
 
-            auto dt = receiveTS - lastReceiveTS;
-            lastReceiveTS = receiveTS;
-            float freq = 1./(std::chrono::duration_cast<std::chrono::microseconds>(dt).count()) * 1000000.;
-            std::cout << "exec time: " << std::chrono::duration_cast<std::chrono::microseconds>(now - before).count() << "µs\n";
-            std::cout << "dt: " << std::chrono::duration_cast<std::chrono::microseconds>(dt).count() << "µs\n";
-
-            std::cout << "freq: " << freq << "Hz\n";
         } else {
             usleep(10);
         }
