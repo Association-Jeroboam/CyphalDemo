@@ -65,7 +65,7 @@ CPPOBJS = $(CPPSOURCES:%.cpp=%.o)
 all:
 	gcc -c $(INCDIR) $(CSOURCES)
 	g++ -pthread -c $(INCDIR) $(CPPSOURCES)
-	g++ -o cyphal_demo canard.o $(CPPOBJS)
+	g++ -pthread -o  cyphal_demo canard.o $(CPPOBJS)
 
 
 clean:

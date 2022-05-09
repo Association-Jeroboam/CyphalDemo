@@ -1,6 +1,8 @@
 #include <cstdio>
+#include <iostream>
 #include <cstdlib>
 #include <thread>
+#include <pthread.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
@@ -12,6 +14,7 @@
 #include <linux/can.h>
 #include <linux/can/raw.h>
 #include "libcanard/libcanard/canard.h"
+#include "Heartbeat_1_0.h"
 
 constexpr int CAN_RX_MAX_SUBSCRIPTION = 32;
 constexpr int MAX_FRAME_SIZE = 8;
@@ -20,9 +23,14 @@ const uint32_t CAN_EXT_ID_MASK = (1 <<29) -1;
 void * canardSpecificAlloc(CanardInstance * instance, size_t amount);
 void canardSpecificFree(CanardInstance * instance, void * pointer);
 void rcvThread(void);
+void checkTxQueue(void);
 void print_usage(void);
 bool check_parameter(char * iface, char * name, size_t n);
-
+void heartbeatRoutine(void);
+bool pushQueue(const CanardTransferMetadata* const metadata,
+               const size_t                        payload_size,
+               const void* const                   payload);
+int send_can_frame(struct can_frame * frame);
 void initCAN(char * iface);
 void initCanard(void);
 
@@ -41,10 +49,11 @@ unsigned int subCnt;
 
 
 void execution_thread() {
-    usleep(250000);
+    //cheat to simulate an external process
     while(true) {
+        heartbeatRoutine();
         pthread_mutex_unlock(&execution_lock);
-        usleep(500000);
+        usleep(1000000);
     }
 }
 
@@ -86,18 +95,20 @@ int main(int argc, char ** argv) {
     std::thread thread_execture(execution_thread);
     while (true) {
         pthread_mutex_lock(&execution_lock);
-        printf("main value 2\n");
+        checkTxQueue();
     }
     return 0;
 }
 
 void rcvThread(void) {
+    auto lastReceiveTS = std::chrono::high_resolution_clock::now();
     while (true) {
         if(canIFace !=0) {
             struct can_frame rx_frame;
-            printf("check msg\n");
             int nbytes = read(canIFace, &rx_frame, sizeof(struct can_frame));
-            printf("check end\n");
+
+            auto receiveTS = std::chrono::high_resolution_clock::now();
+            auto before = std::chrono::high_resolution_clock::now();
 
             if (nbytes >= 0) {
                 const CanardMicrosecond timestamp = 0;
@@ -128,11 +139,103 @@ void rcvThread(void) {
                     printf("frame error %i\n", ret);
                 }
             }
+            auto now = std::chrono::high_resolution_clock::now();
+            auto delta = now - before;
+            std::cout << "exec time: " << std::chrono::duration_cast<std::chrono::microseconds>(now - before).count() << "µs\n";
+            auto dt = receiveTS - lastReceiveTS;
+            lastReceiveTS = receiveTS;
+            std::cout << "dt: " << std::chrono::duration_cast<std::chrono::microseconds>(dt).count() << "µs\n";
+            float freq = 1./(std::chrono::duration_cast<std::chrono::microseconds>(dt).count()) * 1000.;
+            std::cout << "freq: " << freq << "Hz\n";
         } else {
             usleep(10);
         }
 
     }
+}
+
+void checkTxQueue(void) {
+    const CanardTxQueueItem* item = canardTxPeek(&queue);
+
+    while(item != NULL) {
+        CanardTxQueueItem* extractedItem = canardTxPop(&queue, item);
+        uint32_t           size          = item->frame.payload_size;
+
+        do {
+            struct can_frame frame;
+            frame.can_id = item->frame.extended_can_id | 1 << 31;
+
+            if (size >= MAX_FRAME_SIZE) {
+                frame.can_dlc = MAX_FRAME_SIZE;
+                size -= MAX_FRAME_SIZE;
+            } else {
+                frame.can_dlc= size;
+                size      = 0;
+            }
+            memcpy(&frame.data, item->frame.payload, frame.can_dlc);
+
+            send_can_frame(&frame);
+        } while (size > 0);
+
+        instance.memory_free(&instance, extractedItem);
+        item = canardTxPeek(&queue);
+    }
+}
+
+void heartbeatRoutine(void) {
+    static CanardTransferID transfer_id = 0;
+    struct sysinfo info;
+    sysinfo(&info);
+
+    uint32_t now = info.uptime;
+    const uavcan_node_Heartbeat_1_0 heartbeat = {
+            .uptime = now,
+            .health = {
+                    .value = uavcan_node_Health_1_0_NOMINAL
+            },
+            .mode = {
+                    .value = uavcan_node_Mode_1_0_OPERATIONAL,
+            },
+            .vendor_specific_status_code = 42,
+    };
+
+    size_t buf_size = uavcan_node_Heartbeat_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_;
+    uint8_t buffer[uavcan_node_Heartbeat_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
+
+    uavcan_node_Heartbeat_1_0_serialize_(&heartbeat, buffer, &buf_size);
+
+
+    const CanardTransferMetadata metadata = {
+            .priority = CanardPriorityNominal,
+            .transfer_kind = CanardTransferKindMessage,
+            .port_id = uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_,
+            .remote_node_id = CANARD_NODE_ID_UNSET,
+            .transfer_id = transfer_id,
+    };
+    transfer_id++;
+    bool success = pushQueue(&metadata, buf_size, buffer);
+    if (!success ) {
+        printf("Queue push failed\n");
+    }
+}
+
+int send_can_frame(struct can_frame * frame) {
+    if (write(canIFace, frame, sizeof(struct can_frame)) != sizeof(struct can_frame)) {
+        perror("Write ERROR");
+        return 1;
+    }
+    return 0;
+}
+
+bool pushQueue(const CanardTransferMetadata* const metadata,
+               const size_t                        payload_size,
+               const void* const                   payload) {
+    bool success;
+    pthread_mutex_lock(&queue_lock);
+    int32_t res = canardTxPush(&queue, &instance, 0, metadata, payload_size, payload);
+    pthread_mutex_unlock(&queue_lock);
+    success = (0 <= res);
+    return success;
 }
 
 void initCAN(char * iface) {
