@@ -15,6 +15,7 @@
 #include <linux/can/raw.h>
 #include "libcanard/libcanard/canard.h"
 #include "Heartbeat_1_0.h"
+#include "cartesian/State_0_1.h"
 
 constexpr int CAN_RX_MAX_SUBSCRIPTION = 32;
 constexpr int MAX_FRAME_SIZE = 8;
@@ -30,6 +31,7 @@ void heartbeatRoutine(void);
 bool pushQueue(const CanardTransferMetadata* const metadata,
                const size_t                        payload_size,
                const void* const                   payload);
+bool subscribe(CanardTransferKind transfer_kind, CanardPortID port_id, size_t extent);
 int send_can_frame(struct can_frame * frame);
 void initCAN(char * iface);
 void initCanard(void);
@@ -78,6 +80,8 @@ int main(int argc, char ** argv) {
 
     initCAN(iface);
     initCanard();
+    CanardPortID portID = 0;
+    subscribe(CanardTransferKindMessage, portID, reg_udral_physics_kinematics_cartesian_State_0_1_EXTENT_BYTES_);
 
     if (pthread_mutex_init(&execution_lock, NULL) != 0)
     {
@@ -130,6 +134,11 @@ void rcvThread(void) {
                 if(ret == 1) {
                     //success
                     printf("MSG rcvd\n");
+                    printf("ID %lu\n", frame.extended_can_id);
+                    printf("data: ");
+                    for(uint32_t i = 0; i < frame.payload_size; i++) {
+                        printf("%X ", ((uint32_t*)frame.payload)[i]);
+                    }
                     instance.memory_free(&instance, transfer.payload);
 
                 } else if (ret == 0) {
@@ -141,11 +150,13 @@ void rcvThread(void) {
             }
             auto now = std::chrono::high_resolution_clock::now();
             auto delta = now - before;
-            std::cout << "exec time: " << std::chrono::duration_cast<std::chrono::microseconds>(now - before).count() << "µs\n";
+
             auto dt = receiveTS - lastReceiveTS;
             lastReceiveTS = receiveTS;
+            float freq = 1./(std::chrono::duration_cast<std::chrono::microseconds>(dt).count()) * 1000000.;
+            std::cout << "exec time: " << std::chrono::duration_cast<std::chrono::microseconds>(now - before).count() << "µs\n";
             std::cout << "dt: " << std::chrono::duration_cast<std::chrono::microseconds>(dt).count() << "µs\n";
-            float freq = 1./(std::chrono::duration_cast<std::chrono::microseconds>(dt).count()) * 1000.;
+
             std::cout << "freq: " << freq << "Hz\n";
         } else {
             usleep(10);
@@ -236,6 +247,31 @@ bool pushQueue(const CanardTransferMetadata* const metadata,
     pthread_mutex_unlock(&queue_lock);
     success = (0 <= res);
     return success;
+}
+
+bool subscribe(CanardTransferKind transfer_kind, CanardPortID port_id, size_t extent){
+
+    if(subCnt >= CAN_RX_MAX_SUBSCRIPTION) return false;
+
+    int32_t subRet = canardRxSubscribe(&instance,
+                                       transfer_kind,
+                                       port_id,
+                                       extent,
+                                       CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
+                                       &subscriptions[subCnt]);
+    if(subRet == 1) {
+    // subscription created
+
+    } else if(subRet == 0) {
+    // Subscription already existing
+    //TODO
+    }
+
+    bool res = subRet >= 0;
+    if(res) {
+        subCnt++;
+    }
+    return res;
 }
 
 void initCAN(char * iface) {
