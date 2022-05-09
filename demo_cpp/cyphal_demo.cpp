@@ -336,7 +336,7 @@ void * canardSpecificAlloc(CanardInstance * instance, size_t amount) {
 
 void canardSpecificFree(CanardInstance * instance, void * pointer) {
     (void)instance;
-    free(pointer);
+    if(pointer) free(pointer);
 }
 
 void print_usage(void) {
