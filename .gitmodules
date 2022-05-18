@@ -4,3 +4,6 @@
 [submodule "jeroboam"]
 	path = jeroboam
 	url = git@github.com:Association-Jeroboam/jeroboam_private_cyphal_datatypes.git
+[submodule "jeroboam_datatypes"]
+	path = jeroboam_datatypes
+	url = git@github.com:Association-Jeroboam/jeroboam_private_cyphal_datatypes.git

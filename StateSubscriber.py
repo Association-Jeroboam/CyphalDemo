@@ -123,13 +123,13 @@ class StatePublisher:
         # This loop will exit automatically when the node is close()d. It is also possible to use receive() instead.
         async for m, _metadata in self._sub_t_sp:
             assert isinstance(m, reg.udral.physics.kinematics.cartesian.State_0_1)
-            #compute twist commands
-            linear = uavcan.si.unit.velocity.Vector3_1_0()
-            linear.meter_per_second = [1., 0., 0.]
-            angular = uavcan.si.unit.angular_velocity.Vector3_1_0()
-            angular.radian_per_second = [0., 0., 3.14]
+        #    #compute twist commands
+        #    linear = uavcan.si.unit.velocity.Vector3_1_0()
+        #    linear.meter_per_second = [1., 0., 0.]
+        #    angular = uavcan.si.unit.angular_velocity.Vector3_1_0()
+        #    angular.radian_per_second = [0., 0., 3.14]
 
-            await self._pub_v_cmd.publish(reg.udral.physics.kinematics.cartesian.Twist_0_1(linear=linear, angular=angular))
+        #    await self._pub_v_cmd.publish(reg.udral.physics.kinematics.cartesian.Twist_0_1(linear=linear, angular=angular))
 
     def close(self) -> None:
         """
